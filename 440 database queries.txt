@@ -1,0 +1,195 @@
+1)* Show all of the people that got a car rental from Store 3 in 2025
+
+
+DECLARE @CustomerName VARCHAR(50);
+DECLARE @CarInfo VARCHAR(50);
+DECLARE @StartDate VARCHAR(15);
+DECLARE @TotalCost VARCHAR(10);
+
+DECLARE Store3_Cursor CURSOR FOR
+SELECT 
+    c.FirstName + ' ' + c.LastName AS CustomerName,
+    ca.Make + ' ' + ca.Model AS CarInfo,
+    b.StartDate,
+    b.TotalCost
+FROM Booking b
+JOIN Car ca ON b.CarID = ca.CarID
+JOIN Customer c ON b.CustomerID = c.CustomerID
+WHERE ca.StoreID = 3 AND YEAR(TRY_CAST(b.StartDate AS DATE)) = 2025;
+
+OPEN Store3_Cursor;
+FETCH NEXT FROM Store3_Cursor INTO @CustomerName, @CarInfo, @StartDate, @TotalCost;
+WHILE @@FETCH_STATUS = 0
+BEGIN
+    PRINT @CustomerName + ' rented a ' + @CarInfo + ' on ' + @StartDate + ' for ' + @TotalCost;
+    
+    FETCH NEXT FROM Store3_Cursor INTO @CustomerName, @CarInfo, @StartDate, @TotalCost;
+END;
+
+CLOSE Store3_Cursor;
+DEALLOCATE Store3_Cursor;
+
+2) Scalar UDF: Create UDF
+
+CREATE FUNCTION dbo.fn_GetRentalDays
+(
+    @BookingID INT
+)
+RETURNS INT
+AS
+BEGIN
+    DECLARE @RentalDays INT;
+    DECLARE @StartDate DATE;
+    DECLARE @EndDate DATE;
+    
+    -- Get the start and end dates for the booking
+    SELECT 
+        @StartDate = TRY_CAST(StartDate AS DATE),
+        @EndDate = TRY_CAST(EndDate AS DATE)
+    FROM Booking
+    WHERE BookingID = @BookingID;
+    
+    -- Calculate the difference in days
+    IF @StartDate IS NOT NULL AND @EndDate IS NOT NULL
+    BEGIN
+        SET @RentalDays = DATEDIFF(DAY, @StartDate, @EndDate);
+    END
+    ELSE
+    BEGIN
+        SET @RentalDays = NULL;
+    END
+    
+    RETURN @RentalDays;
+END;
+GO
+
+
+--USE THE UDF TO FIND BOOKINGS WITH NEGATIVE RENTAL DAYS FOR DATA QUALITY
+
+
+
+SELECT 
+    BookingID,
+    CustomerID,
+    StartDate,
+    EndDate,
+    dbo.fn_GetRentalDays(BookingID) AS RentalDays,
+    TotalCost
+FROM Booking
+WHERE dbo.fn_GetRentalDays(BookingID) < 0
+ORDER BY BookingID;
+
+
+
+
+-- to drop function
+
+DROP FUNCTION dbo.fn_GetRentalDays;
+
+
+3)Get all employees who work at Store 5
+
+SELECT EmployeeID, FirstName, LastName, Title, Salary
+FROM Employee
+WHERE StoreID = 5
+ORDER BY LastName, FirstName;
+
+
+4) Revenue per store by year (pivoted so each year becomes a column)
+
+WITH ConvertedDates AS (
+    SELECT 
+        ca.StoreID,
+        TRY_CAST(b.StartDate AS DATE) AS ConvertedDate,
+        CAST(REPLACE(b.TotalCost, '$', '') AS DECIMAL(10,2)) AS TotalCost
+    FROM Booking b
+    JOIN Car ca ON b.CarID = ca.CarID
+    WHERE TRY_CAST(b.StartDate AS DATE) IS NOT NULL
+)
+SELECT StoreID,  [2025], [2026]
+FROM
+(
+    SELECT 
+        StoreID,
+        YEAR(ConvertedDate) AS RentalYear,
+        TotalCost
+    FROM ConvertedDates
+) AS src
+PIVOT
+(
+    SUM(TotalCost)
+    FOR RentalYear IN ( [2025], [2026])
+) AS p
+ORDER BY StoreID;
+
+5) Shows what cars are available at store 5
+
+
+SELECT c.CarID, c.Make, c.Model, c.CarYear, s.StoreId
+FROM Car c
+INNER JOIN Store s
+ON c.StoreID = s.StoreID
+WHERE status = 'available' AND s.StoreId = '5';
+
+6) Find the revenue of each store
+
+SELECT 
+    s.StoreId,
+    CONCAT('$', FORMAT(SUM(CAST(REPLACE(b.TotalCost, '$', '') AS INT)), 'N0')) AS Revenue
+FROM Store s
+INNER JOIN Car c ON s.StoreID = c.StoreID
+INNER JOIN Booking b ON c.CarID = b.CarID
+GROUP BY s.StoreID;
+
+
+
+
+8)REVENUE BY VEHICLE TYPE AND YEAR
+
+WITH ConvertedDates AS (
+    SELECT 
+        ca.VehicleType,
+        TRY_CAST(b.StartDate AS DATE) AS ConvertedDate,
+        CAST(REPLACE(b.TotalCost, '$', '') AS DECIMAL(10,2)) AS TotalCost
+    FROM Booking b
+    JOIN Car ca ON b.CarID = ca.CarID
+    WHERE TRY_CAST(b.StartDate AS DATE) IS NOT NULL
+)
+SELECT VehicleType, [2025], [2026]
+FROM
+(
+    SELECT VehicleType, YEAR(ConvertedDate) AS RentalYear, TotalCost
+    FROM ConvertedDates
+) AS src
+PIVOT
+(
+    SUM(TotalCost)
+    FOR RentalYear IN ( [2025], [2026])
+) AS p
+ORDER BY VehicleType;
+
+
+
+9) AFTER TRIGGER FOR DELETING DATA
+
+
+CREATE TRIGGER trg_PreventDelete
+ON Employee
+AFTER DELETE
+AS
+BEGIN
+    SET NOCOUNT ON;
+    ROLLBACK TRANSACTION;
+    RAISERROR('Deletion from Employees table is not allowed. Please contact your administrator.', 16, 1);
+END;
+GO
+
+-- Test the trigger 
+DELETE FROM Employee WHERE EmployeeID = 1;
+
+
+
+
+
+
+

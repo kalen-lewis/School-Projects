@@ -1,2 +1,2 @@
 # School-Projects
-Here are a couple of projects that I worked on over the last school year. The 440 database queries file contains some SQL code I wrote that we used to pull data out of our database. The dashboard screenshots show my Power BI pages that I created using data from an online store. 
+Here are a couple of projects that I worked on over the last school year. The 440 database queries file contains some SQL code I wrote that we used to pull data out of our database. The dashboard screenshots show my Power BI pages that I created using data from an online store. I used Claude and ChatGPT to assist in making my scripts and queries more efficient. 
